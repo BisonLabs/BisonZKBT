@@ -1,0 +1,3 @@
+Addr:tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m
+Message:{"sAddr":"tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m","rAddr":"tb1pn600ze5gq49gc9a7r8ry4vkdul2kud4vf4k9j3ek0pxvrwruvn6s42w235","amt":"12345","tick":"zkbt"}
+sig:AUCS8tSVmriOc69WdCB4TwHMQtrb3rS7dWYDY0Z/uCisbKvSdKzE5Lltvi3VPq7qmB1RXZBGDDJmxNrjvJTREnKa
