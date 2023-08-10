@@ -1,0 +1,22 @@
+{
+    "p": "BisonStatus",
+    "rawProof": "",
+    "ContractName": "ZKBT",
+    "ContractAddr": "tb1pam7razjc7647hthazkqzlycm78hr2ety0cxqaktc3suywm03x56s8y4hmg",
+    "Version": "Bison0.1",
+    "statusNum": 2,
+    "Data": [
+        {
+            "address": "tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m",
+            "amount": 20995000
+        },
+        {
+            "address": "tb1pn600ze5gq49gc9a7r8ry4vkdul2kud4vf4k9j3ek0pxvrwruvn6s42w235",
+            "amount": 3000
+        },
+        {
+            "address": "tb1pukwfjjwy3vtyv8npnyzkpwl75l7mp2wzkg3ve8kgnzgef0ufj69qagc0gz",
+            "amount": 3500
+        }
+    ]
+}
