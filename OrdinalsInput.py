@@ -3,7 +3,7 @@ import json
 import requests
 import os
 import shutil
-
+from configparser import ConfigParser
 
 def delete_files():
     folders_to_clear = ['./status', './statusProof', './db','./zkProof']
@@ -18,7 +18,6 @@ def delete_files():
         except FileNotFoundError:
             print(f"{folder} not found. Skipping...")
 
-
 def fetch_inscriptions():
     command = ["ord", "--testnet", "wallet", "inscriptions"]
     result = subprocess.run(command, stdout=subprocess.PIPE)
@@ -26,15 +25,19 @@ def fetch_inscriptions():
     inscriptions = json.loads(output)
     return inscriptions
 
-def save_content(inscriptions):
+def save_content(inscriptions, ordinal_url, contract_name):
     for ins in inscriptions:
-        url = f"http://192.168.1.179:8075/content/{ins['inscription']}"
+        url = f"{ordinal_url}/content/{ins['inscription']}"
         response = requests.get(url)
         
         try:
             content = response.json()
         except json.JSONDecodeError:
             print(f"Non-JSON response from {url}. Skipping...")
+            continue
+
+        if content.get('ContractName') != contract_name:
+            print(f"Contract name mismatch: expected {contract_name}, got {content.get('ContractName')}. Skipping...")
             continue
 
         if "statusNum" in content:
@@ -54,9 +57,15 @@ def save_content(inscriptions):
             json.dump(content, file, indent=4)
 
 def OrdinalInput():
+    config = ConfigParser()
+    config.read('config.ini')
+
+    ordinal_url = config['ordinal_explorer']['url']
+    contract_name = config['contract_info']['contract_name']
+
     delete_files()
     inscriptions = fetch_inscriptions()
-    save_content(inscriptions)
+    save_content(inscriptions, ordinal_url, contract_name)
     print('Status synced from Bitcoin.')
 
 #OrdinalInput()

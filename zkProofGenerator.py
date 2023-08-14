@@ -17,8 +17,8 @@ def copy_file(n, source_dir, dest_dir, file_pattern):
     shutil.copy2(source_file, dest_file)
 
 def run_cairo_command(cairo_dir, n):
-    cairo_run_path = "/home/jayhaizeizai/.pyenv/shims/cairo-run"
-    giza_prove_path = "/home/jayhaizeizai/.cargo/bin/giza"
+    cairo_run_path = "/home/jaylee/cairo_venv/bin/cairo-run"
+    giza_prove_path = "/home/jaylee/.cargo/bin/giza"
     cairo_command = f"{cairo_run_path} --program=test_compiled.json --layout=small --program_input=zk_tmp.json --memory_file=memory.bin --trace_file=trace.bin"
     giza_command = f"{giza_prove_path} prove --trace=trace.bin --memory=memory.bin --program=test_compiled.json --output=zkproof{n}.bin --num-outputs=0"
     
@@ -48,8 +48,8 @@ def zkProofGenerator():
     start_time = time.time()
     status_dir = './status/'
     proof_dir = './statusProof/'
-    target_status_dir = '/home/jayhaizeizai/Documents/Cairo/OfficalCario/status/'
-    target_proof_dir = '/home/jayhaizeizai/Documents/Cairo/OfficalCario/statusProof/'
+    target_status_dir = '/home/jaylee/Documents/BisonCairoVerifier/status/'
+    target_proof_dir = '/home/jaylee/Documents/BisonCairoVerifier/statusProof/'
 
     # Get the latest n from the status directory
     n = get_latest_n(status_dir)
@@ -65,10 +65,10 @@ def zkProofGenerator():
     copy_file(n, proof_dir, target_proof_dir, 'proof_{}.json')
 
     # Copy zk_tmp.json to the target directory
-    shutil.copy2('zk_tmp.json', '/home/jayhaizeizai/Documents/Cairo/OfficalCario/')
+    shutil.copy2('zk_tmp.json', '/home/jaylee/Documents/BisonCairoVerifier/')
 
     # Run the cairo command in the target directory and check result
-    if run_cairo_command('/home/jayhaizeizai/Documents/Cairo/OfficalCario/', n):
+    if run_cairo_command('/home/jaylee/Documents/BisonCairoVerifier/', n):
         print("Verification succeeded!")
     else:
         print("Verification failed!")
