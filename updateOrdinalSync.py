@@ -15,7 +15,7 @@ def updateOrdinalSync():
 
     # Process and save the inscriptions
     for ins in inscriptions:
-        url = f"http://192.168.1.179:8075/content/{ins['inscription']}"
+        url = f"http://209.141.37.169:8075/content/{ins['inscription']}"
         response = requests.get(url)
 
         try:

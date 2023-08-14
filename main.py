@@ -13,11 +13,17 @@ from OrdinalsOutput import inscribe_to_bitcoin
 from OrdinalsInput import OrdinalInput
 from sendBitcoin import send_bitcoin
 from updateOrdinalSync import updateOrdinalSync
+import configparser
+
+
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 OrdinalInput()
 
-file_path_bison = os.path.abspath(os.getcwd()) + "/db/bison.db"
-file_path_ordinal_sync = os.path.abspath(os.getcwd()) + "/db/OrdinalSync.db"
+file_path_bison = os.path.abspath(os.getcwd()) + config['database']['file_path_bison']
+file_path_ordinal_sync = os.path.abspath(os.getcwd()) + config['database']['file_path_ordinal_sync']
+tick_value = config['contract_info']['tick_value']
 
 app = Flask(__name__)
 CORS(app)
@@ -103,6 +109,9 @@ class TransferResource(Resource):
             "sig": ""
         }, separators=(',', ':'))
 
+        if tick != tick_value:
+            return {"error": "invalid tick value"}, 400
+        
         process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', senderAddress, message, signature], text=True, capture_output=True)
         result = process.stdout.strip()  # Return result
 
@@ -196,5 +205,5 @@ api.add_resource(NewestProofResource, '/newest_proof')
 
 if __name__ == '__main__':
 
-    schedule_export_db(600)  # Every 600 seconds
-    app.run(host='0.0.0.0', port=5000)
+    schedule_export_db(int(config['other']['interval'])) # Every 600 seconds
+    app.run(host=config['server']['host'], port=int(config['server']['port']))
