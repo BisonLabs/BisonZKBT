@@ -15,6 +15,8 @@ from sendBitcoin import send_bitcoin
 from updateOrdinalSync import updateOrdinalSync
 import configparser
 from datetime import datetime
+import hashlib
+
 
 
 config = configparser.ConfigParser()
@@ -61,6 +63,11 @@ with app.app_context():
         else:
             balance.amount = record['amount']
     db.session.commit()
+
+def generate_hash(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig):
+    content = f"{method}{quoteID}{expiry}{tick1}{contractAddress1}{amount1}{tick2}{contractAddress2}{amount2}{makerAddr}{takerAddr}{makerSig}{takerSig}".encode('utf-8')
+    return hashlib.sha256(content).hexdigest()
+
 
 def record_proof(method, **kwargs):
     # Use the global statusNum
@@ -127,21 +134,77 @@ def transfer_funds(sender_address, receiver_address, amount):
 
     return True, "transfer successful"
 
-def prepare_transfer(sender_address, receiver_address, amount, transaction_hash):
-    # 检查余额等
-    sender_balance = Balance.query.filter_by(address=sender_address).first()
-    if not sender_balance or sender_balance.amount < int(amount):
-        return False, "insufficient balance"
-    
-    # 记录预备交易信息到临时表
-    temp_transaction = TempTransaction(hash=transaction_hash, sender=sender_address, receiver=receiver_address, amount=amount)
+def prepare_swap(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig):
+    temp_transaction = TempTransaction(
+        hash=generate_hash(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig),
+        method=method,
+        quoteID=quoteID,
+        expiry=expiry,
+        tick1=tick1,
+        contractAddress1=contractAddress1,
+        amount1=amount1,
+        tick2=tick2,
+        contractAddress2=contractAddress2,
+        amount2=amount2,
+        makerAddr=makerAddr,
+        takerAddr=takerAddr,
+        makerSig=makerSig,
+        takerSig=takerSig
+    )
     db.session.add(temp_transaction)
     db.session.commit()
+    return True, temp_transaction.hash
 
-    return True, "prepared"
+
+def commit_swap(hash_value):
+    # 找到对应的临时交易记录
+    temp_transaction = TempTransaction.query.filter_by(hash=hash_value).first()
+
+    # 检查是否找到了记录
+    if temp_transaction is None:
+        return False, "TempTransaction not found"
+
+    # 在这里可以执行实际的交换操作，例如，调用transfer_funds函数
+    # 根据tick值选择正确的交换参数
+    sender_address, receiver_address, amount_to_transfer = (
+        (temp_transaction.makerAddr, temp_transaction.takerAddr, temp_transaction.amount1)
+        if temp_transaction.tick1 == tick_value
+        else (temp_transaction.takerAddr, temp_transaction.makerAddr, temp_transaction.amount2)
+    )
+
+    success, message = transfer_funds(sender_address, receiver_address, amount_to_transfer)
+    if not success:
+        return False, message
+
+    # 删除或更新临时交易记录，根据你的业务逻辑进行选择
+    # 例如，以下代码将删除记录
+    db.session.delete(temp_transaction)
+    db.session.commit()
+
+    # 可以在此处调用record_proof来存储证明
+    record_proof("swap", quoteID=temp_transaction.quoteID, expiry=temp_transaction.expiry,
+                 tick1=temp_transaction.tick1, contractAddress1=temp_transaction.contractAddress1,
+                 amount1=temp_transaction.amount1, tick2=temp_transaction.tick2,
+                 contractAddress2=temp_transaction.contractAddress2, amount2=temp_transaction.amount2,
+                 makerAddr=temp_transaction.makerAddr, takerAddr=temp_transaction.takerAddr,
+                 makerSig=temp_transaction.makerSig, takerSig=temp_transaction.takerSig)
+
+    return True, "Swap committed successfully"
 
 
-class SwapResource(Resource):
+
+def rollback_swap(hash):
+    temp_transaction = TempTransaction.query.filter_by(hash=hash).first()
+    if temp_transaction:
+        # 删除临时交易，撤销交换
+        db.session.delete(temp_transaction)
+        db.session.commit()
+        return True, "Swap rolled back"
+    return False, "Swap rollback failed"
+
+
+
+class PrepareSwapResource(Resource):
     def post(self):
         json_data = request.get_json(force=True)
         
@@ -215,25 +278,32 @@ class SwapResource(Resource):
 
 
         # 确定处理的 tick
-        if tick_value == tick1:
-            sender_address = makerAddr
-            receiver_address = takerAddr
-            amount_to_transfer = amount1
-        elif tick_value == tick2:
-            sender_address = takerAddr
-            receiver_address = makerAddr
-            amount_to_transfer = amount2
-        else:
+        if (tick_value != tick1) and (tick_value != tick2):
             return {"error": "invalid tick value"}, 400
         
-        success, message = transfer_funds(sender_address, receiver_address, amount_to_transfer)
+        # 使用prepare_swap替代直接转账
+        success, transaction_hash = prepare_swap(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig)
         if not success:
+            return {"error": "Failed to prepare the swap"}, 400
+
+        return {"status": "swap prepared", "transaction_hash": transaction_hash}, 200
+
+class CommitSwapResource(Resource):
+    def post(self, hash_value):
+        success, message = commit_swap(hash_value)
+        if success:
+            return {"status": "Swap committed successfully", "hash": hash_value}, 200
+        else:
             return {"error": message}, 400
+        
 
-        record_proof("swap", quoteID=quoteID, expiry=expiry, tick1=tick1, contractAddress1=contractAddress1, amount1=amount1, tick2=tick2, contractAddress2=contractAddress2, amount2=amount2, makerAddr=makerAddr, takerAddr=takerAddr, makerSig=makerSig, takerSig=takerSig)
-
-
-        return {"status": "swap successful"}, 200
+class RollbackSwapResource(Resource):
+    def post(self, hash_value):
+        success, message = rollback_swap(hash_value)  # 你需要定义这个函数
+        if success:
+            return {"status": "Swap rolled back successfully", "hash": hash_value}, 200
+        else:
+            return {"error": message}, 400
 
 
 class TransferResource(Resource):
@@ -270,7 +340,7 @@ class TransferResource(Resource):
             if method == 'transfer':
                 success, message = transfer_funds(senderAddress, receiptAddress, amount)
                 if success:
-                    record_proof(method, tick, senderAddress=senderAddress, receiptAddress=receiptAddress, amount=amount, signature=signature)
+                    record_proof(method,tick = tick, senderAddress=senderAddress, receiptAddress=receiptAddress, amount=amount, signature=signature)
 
                     return {"status": message,
                             "from": senderAddress,
@@ -335,8 +405,9 @@ api.add_resource(TransferResource, '/transfer')
 api.add_resource(BalanceResource, '/balance')
 api.add_resource(NewestStatusResource, '/newest_status')
 api.add_resource(NewestProofResource, '/newest_proof')
-api.add_resource(SwapResource, '/swap')
-
+api.add_resource(PrepareSwapResource, '/prepare_swap')
+api.add_resource(CommitSwapResource, '/commit_swap/<string:hash_value>')
+api.add_resource(RollbackSwapResource, '/rollback_swap/<string:hash_value>')
 
 
 if __name__ == '__main__':

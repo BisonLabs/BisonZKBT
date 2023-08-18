@@ -14,11 +14,20 @@ class Balance(db.Model):
 class TempTransaction(db.Model):
     __bind_key__ = 'bison'
     id = db.Column(db.Integer, primary_key=True)
-    hash = db.Column(db.String, unique=True, nullable=False)
-    sender_address = db.Column(db.String, nullable=False)
-    receiver_address = db.Column(db.String, nullable=False)
-    amount = db.Column(db.Integer, nullable=False)
-    method = db.Column(db.String, nullable=False) # 添加额外的字段，如交易方法，如果需要的话
+    hash = db.Column(db.String(256), unique=True, nullable=False)
+    method = db.Column(db.String(80), nullable=False)
+    quoteID = db.Column(db.String(80))
+    expiry = db.Column(db.String(80))
+    tick1 = db.Column(db.String(80))
+    contractAddress1 = db.Column(db.String(80))
+    amount1 = db.Column(db.Float)
+    tick2 = db.Column(db.String(80))
+    contractAddress2 = db.Column(db.String(80))
+    amount2 = db.Column(db.Float)
+    makerAddr = db.Column(db.String(80))
+    takerAddr = db.Column(db.String(80))
+    makerSig = db.Column(db.String(80))
+    takerSig = db.Column(db.String(80))
 
 
 class Status(db.Model):
