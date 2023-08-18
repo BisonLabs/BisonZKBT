@@ -1,5 +1,14 @@
 {
     "p": "BisonRawProof",
-    "statusNum": "2",
-    "transactions": []
+    "statusNum": "1",
+    "transactions": [
+        {
+            "method": "transfer",
+            "tick": "fast",
+            "sAddr": "tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m",
+            "rAddr": "tb1prlzz3zl4t4lyhj6e6pn9d5l723ahs8ewj935rqn999kueggxtreqtm93jt",
+            "amt": "100",
+            "sig": "AUBhF/n3KEbso/MAAc0CX81O3Xizeu/EVifPauARaP2rcRyS/9fe5GmEk+y8AiXApTTzxVNvfa6uQUotpXun4sPc"
+        }
+    ]
 }
