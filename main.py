@@ -3,7 +3,7 @@ from flask_restful import Resource, Api
 from flask_cors import CORS
 import json
 import subprocess  
-from models import db, Balance,Status,Proof  # import database models
+from models import db, Balance,Status,Proof,TempTransaction  # import database models
 import os
 import glob
 from threading import Timer
@@ -14,6 +14,7 @@ from OrdinalsInput import OrdinalInput
 from sendBitcoin import send_bitcoin
 from updateOrdinalSync import updateOrdinalSync
 import configparser
+from datetime import datetime
 
 
 config = configparser.ConfigParser()
@@ -61,7 +62,7 @@ with app.app_context():
             balance.amount = record['amount']
     db.session.commit()
 
-def record_proof(method, tick, senderAddress, receiptAddress, amount, signature):
+def record_proof(method, **kwargs):
     # Use the global statusNum
     global statusNum
     proof_path = os.path.abspath(os.getcwd()) + f"/statusProof/proof_{statusNum+1}.json"
@@ -76,18 +77,164 @@ def record_proof(method, tick, senderAddress, receiptAddress, amount, signature)
         data = {"p": "BisonRawProof", "statusNum": str(statusNum), "transactions": []}
 
     # Add the new record
-    data["transactions"].append({
-        "method": method,
-        "tick": tick,
-        "sAddr": senderAddress,
-        "rAddr": receiptAddress,
-        "amt": amount,
-        "sig": signature
-    })
+    if method == "transfer":
+        data["transactions"].append({
+            "method": method,
+            "tick": kwargs['tick'],
+            "sAddr": kwargs['senderAddress'],
+            "rAddr": kwargs['receiptAddress'],
+            "amt": kwargs['amount'],
+            "sig": kwargs['signature']
+        })
+    elif method == "swap":
+        data["transactions"].append({
+            "method": method,
+            "quoteID": kwargs['quoteID'],
+            "expiry": kwargs['expiry'],
+            "tick1": kwargs['tick1'],
+            "contractAddress1": kwargs['contractAddress1'],
+            "amount1": kwargs['amount1'],
+            "tick2": kwargs['tick2'],
+            "contractAddress2": kwargs['contractAddress2'],
+            "amount2": kwargs['amount2'],
+            "makerAddr": kwargs['makerAddr'],
+            "takerAddr": kwargs['takerAddr'],
+            "makerSig": kwargs['makerSig'],
+            "takerSig": kwargs['takerSig']
+        })
 
     # Write back to the file
     with open(proof_path, 'w') as f:
         json.dump(data, f, indent=4)
+
+
+def transfer_funds(sender_address, receiver_address, amount):
+    # 查询发送方余额
+    sender_balance = Balance.query.filter_by(address=sender_address).first()
+    if not sender_balance or sender_balance.amount < int(amount):
+        return False, "insufficient balance"
+
+    # 查询接收方余额，如果不存在，则创建
+    receiver_balance = Balance.query.filter_by(address=receiver_address).first()
+    if receiver_balance is None:
+        receiver_balance = Balance(address=receiver_address, amount=0)
+        db.session.add(receiver_balance)
+
+    # 实际转账
+    sender_balance.amount -= int(amount)
+    receiver_balance.amount += int(amount)
+    db.session.commit()
+
+    return True, "transfer successful"
+
+def prepare_transfer(sender_address, receiver_address, amount, transaction_hash):
+    # 检查余额等
+    sender_balance = Balance.query.filter_by(address=sender_address).first()
+    if not sender_balance or sender_balance.amount < int(amount):
+        return False, "insufficient balance"
+    
+    # 记录预备交易信息到临时表
+    temp_transaction = TempTransaction(hash=transaction_hash, sender=sender_address, receiver=receiver_address, amount=amount)
+    db.session.add(temp_transaction)
+    db.session.commit()
+
+    return True, "prepared"
+
+
+class SwapResource(Resource):
+    def post(self):
+        json_data = request.get_json(force=True)
+        
+        # 提取交换操作所需的所有信息
+        method = json_data.get('method')
+        quoteID = json_data.get('quoteID')
+        expiry = json_data.get('expiry')
+        tick1 = json_data.get('tick1')
+        contractAddress1 = json_data.get('contractAddress1')
+        amount1 = json_data.get('amount1')
+        tick2 = json_data.get('tick2')
+        contractAddress2 = json_data.get('contractAddress2')
+        amount2 = json_data.get('amount2')
+        makerAddr = json_data.get('makerAddr')
+        takerAddr = json_data.get('takerAddr')
+        makerSig = json_data.get('makerSig')
+        takerSig = json_data.get('takerSig')
+        
+        expiry_time = datetime.fromisoformat(expiry.rstrip("Z"))
+
+        # 确认method是swap
+        if method != 'swap':
+            return {"error": "invalid method, expected 'swap'"}, 400
+        
+        # 检查expiry_time是否在当前时间之后
+        if expiry_time < datetime.utcnow():
+            return {"error": "expired swap request"}, 400
+        
+        message = json.dumps({
+            "method": "swap",
+            "quoteID": json_data.get('quoteID'),
+            "expiry": json_data.get('expiry'),
+            "tick1": json_data.get('tick1'),
+            "contractAddress1": json_data.get('contractAddress1'),
+            "amount1": json_data.get('amount1'),
+            "tick2": json_data.get('tick2'),
+            "contractAddress2": json_data.get('contractAddress2'),
+            "amount2": json_data.get('amount2'),
+            "makerAddr": json_data.get('makerAddr'),
+            "takerAddr": "",  # taker地址为空
+            # makerSig  和 takerSig 将稍后添加
+        }, separators=(',', ':'))
+        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', makerAddr, message, makerSig], text=True, capture_output=True)
+        result1 = process.stdout.strip()  # 返回结果
+
+        print(result1)
+        if result1 != 'true':  
+            return {"error": "Invalid signature"}, 400
+    
+        message = json.dumps({
+            "method": "swap",
+            "quoteID": json_data.get('quoteID'),
+            "expiry": json_data.get('expiry'),
+            "tick1": json_data.get('tick1'),
+            "contractAddress1": json_data.get('contractAddress1'),
+            "amount1": json_data.get('amount1'),
+            "tick2": json_data.get('tick2'),
+            "contractAddress2": json_data.get('contractAddress2'),
+            "amount2": json_data.get('amount2'),
+            "makerAddr": json_data.get('makerAddr'),
+            "takerAddr": json_data.get('takerAddr'),  
+        }, separators=(',', ':'))
+        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', takerAddr, message, takerSig], text=True, capture_output=True)
+        result2 = process.stdout.strip()  # 返回结果
+
+        print(result2)
+        if result2 != 'true':  
+            return {"error": "Invalid signature"}, 400
+        # 在交换操作成功后，可以返回一个成功的响应，或者在失败时返回一个错误响应
+
+
+
+        # 确定处理的 tick
+        if tick_value == tick1:
+            sender_address = makerAddr
+            receiver_address = takerAddr
+            amount_to_transfer = amount1
+        elif tick_value == tick2:
+            sender_address = takerAddr
+            receiver_address = makerAddr
+            amount_to_transfer = amount2
+        else:
+            return {"error": "invalid tick value"}, 400
+        
+        success, message = transfer_funds(sender_address, receiver_address, amount_to_transfer)
+        if not success:
+            return {"error": message}, 400
+
+        record_proof("swap", quoteID=quoteID, expiry=expiry, tick1=tick1, contractAddress1=contractAddress1, amount1=amount1, tick2=tick2, contractAddress2=contractAddress2, amount2=amount2, makerAddr=makerAddr, takerAddr=takerAddr, makerSig=makerSig, takerSig=takerSig)
+
+
+        return {"status": "swap successful"}, 200
+
 
 class TransferResource(Resource):
     def post(self):
@@ -112,39 +259,26 @@ class TransferResource(Resource):
         if tick != tick_value:
             return {"error": "invalid tick value"}, 400
         
+        print("Verifing sig")
+
         process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', senderAddress, message, signature], text=True, capture_output=True)
         result = process.stdout.strip()  # Return result
 
         print(result)
+
         if result == 'true':  
             if method == 'transfer':
-                # Balance check here
-                sender_balance = Balance.query.filter_by(address=senderAddress).first()
-                if sender_balance and sender_balance.amount >= int(amount):
-                    # Creat a new address if not exist yet
-                    receipt_balance = Balance.query.filter_by(address=receiptAddress).first()
-                    if receipt_balance is None:
-                        receipt_balance = Balance(address=receiptAddress, amount=0)
-                        db.session.add(receipt_balance)
+                success, message = transfer_funds(senderAddress, receiptAddress, amount)
+                if success:
+                    record_proof(method, tick, senderAddress=senderAddress, receiptAddress=receiptAddress, amount=amount, signature=signature)
 
-                    # Actual transfer
-                    sender_balance.amount -= int(amount)
-                    receipt_balance.amount += int(amount)
-                    db.session.commit()
-
-                    record_proof(method, tick, senderAddress, receiptAddress, amount, signature)
-                    
-                    if receiptAddress == 'tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m':
-                        tmpres = send_bitcoin(senderAddress,int(amount)/10000,2)
-                        print(tmpres)
-
-                    return {"status": "transfer successful", 
-                            "from": senderAddress, 
-                            "to": receiptAddress, 
-                            "amount": amount, 
+                    return {"status": message,
+                            "from": senderAddress,
+                            "to": receiptAddress,
+                            "amount": amount,
                             "signature": signature}, 200
                 else:
-                    return {"error": "insufficient balance"}, 400
+                    return {"error": message}, 400
             else:
                 return {"error": "invalid method"}, 400
         else:  # Logic of invalid signature
@@ -201,6 +335,8 @@ api.add_resource(TransferResource, '/transfer')
 api.add_resource(BalanceResource, '/balance')
 api.add_resource(NewestStatusResource, '/newest_status')
 api.add_resource(NewestProofResource, '/newest_proof')
+api.add_resource(SwapResource, '/swap')
+
 
 
 if __name__ == '__main__':

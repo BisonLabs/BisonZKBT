@@ -160,7 +160,9 @@ cython_debug/
 #.idea/
 
 /bisonappbackend_nodejs/node_modules
-/status
-/statusProof
-/zkProof
+/status/
+/statusProof/
+/zkProof/
 zk_tmp.json
+/db/
+config.ini

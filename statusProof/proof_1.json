@@ -1,30 +1,5 @@
 {
     "p": "BisonRawProof",
     "statusNum": "1",
-    "transactions": [
-        {
-            "method": "transfer",
-            "tick": "zkbt",
-            "sAddr": "tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m",
-            "rAddr": "tb1pukwfjjwy3vtyv8npnyzkpwl75l7mp2wzkg3ve8kgnzgef0ufj69qagc0gz",
-            "amt": "1500",
-            "sig": "AUC0IWv4YppLGhvdFHUIRU8VRJhokPuJkS7aCPzhmPy4uEFm225wwCefV1wOPPFcc4H1mUbm/+lw1MrMTItn68DR"
-        },
-        {
-            "method": "transfer",
-            "tick": "zkbt",
-            "sAddr": "tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m",
-            "rAddr": "tb1pukwfjjwy3vtyv8npnyzkpwl75l7mp2wzkg3ve8kgnzgef0ufj69qagc0gz",
-            "amt": "500",
-            "sig": "AUAMJplNWC9zXb91DgqEGo/GOIpNe+TCpoKu7TkqBQbExV5G2oeBKRGdm7I7f/gbj03YoEYs9KpEge6S/m9E3mjc"
-        },
-        {
-            "method": "transfer",
-            "tick": "zkbt",
-            "sAddr": "tb1ptw39pxy2stdlexwutfjwak7c8u6tnzut80dtwt8fmqfdzpd60nfqsejr7m",
-            "rAddr": "tb1pn600ze5gq49gc9a7r8ry4vkdul2kud4vf4k9j3ek0pxvrwruvn6s42w235",
-            "amt": "500",
-            "sig": "AUAU5jXqCMvNZk1yuXU1080pD3UG43cf1nUkk/etm91FO44q/bb2E3oKxyvfVrCg0gsUozX1zUf7jl7C/zKOL3Z5"
-        }
-    ]
+    "transactions": []
 }
