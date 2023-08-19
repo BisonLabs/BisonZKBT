@@ -3,6 +3,11 @@ import subprocess
 from collections import defaultdict
 import glob
 import re
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+tick_value = config['contract_info']['tick_value']
 
 def sort_by_number(files):
     return sorted(files, key=lambda x: int(re.search(r'\d+', x).group(0)))
@@ -30,25 +35,53 @@ def verify_signatures(file):
     valid = defaultdict(int)
     for tx in transactions:
         method = tx['method']
-        senderAddress = tx['sAddr']
-        receiptAddress = tx['rAddr']
-        amount = tx['amt']
-        tick = tx['tick']
-        signature = tx['sig']
-        message = json.dumps({
-            "method": method,
-            "sAddr": senderAddress,
-            "rAddr": receiptAddress,
-            "amt": amount,
-            "tick": tick,
-            "sig": ""
-        }, separators=(',', ':'))
-        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', senderAddress, message, signature], text=True, capture_output=True)
-        result = process.stdout.strip() 
-        #print(result)
-        if result == 'true':
-            valid[tx['sAddr']] -= int(amount)
-            valid[tx['rAddr']] += int(amount)
+        if method == "transfer":
+            senderAddress = tx['sAddr']
+            receiptAddress = tx['rAddr']
+            amount = tx['amt']
+            tick = tx['tick']
+            signature = tx['sig']
+            message = json.dumps({
+                "method": method,
+                "sAddr": senderAddress,
+                "rAddr": receiptAddress,
+                "amt": amount,
+                "tick": tick,
+                "sig": ""
+            }, separators=(',', ':'))
+            process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', senderAddress, message, signature], text=True, capture_output=True)
+            result = process.stdout.strip() 
+            #print(result)
+            if result == 'true':
+                valid[tx['sAddr']] -= int(amount)
+                valid[tx['rAddr']] += int(amount)
+
+        elif method == "swap":
+            maker_message = json.dumps({
+                "method": "swap",
+                "quoteID": tx['quoteID'],
+                "expiry": tx['expiry'],
+                "tick1": tx['tick1'],
+                "contractAddress1": tx['contractAddress1'],
+                "amount1": tx['amount1'],
+                "tick2": tx['tick2'],
+                "contractAddress2": tx['contractAddress2'],
+                "amount2": tx['amount2'],
+                "makerAddr": tx['makerAddr'],
+                "takerAddr": "",
+            }, separators=(',', ':'))
+            taker_message = maker_message.replace('"takerAddr": ""', f'"takerAddr": "{tx["takerAddr"]}"')
+            maker_result = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', tx['makerAddr'], maker_message, tx['makerSig']], text=True, capture_output=True).stdout.strip()
+            taker_result = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', tx['takerAddr'], taker_message, tx['takerSig']], text=True, capture_output=True).stdout.strip()
+
+            if maker_result == 'true' and taker_result == 'true':
+                if tick_value == tx['tick1']:
+                    valid[tx['makerAddr']] -= tx['amount1']
+                    valid[tx['takerAddr']] += tx['amount1']
+                elif tick_value == tx['tick2']:
+                    valid[tx['makerAddr']] += tx['amount2']
+                    valid[tx['takerAddr']] -= tx['amount2']  
+
     return valid
 
 def print_balances(diff, description):
