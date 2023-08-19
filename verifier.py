@@ -82,7 +82,7 @@ def verify_signatures(file):
                     valid[tx['makerAddr']] += tx['amount2']
                     valid[tx['takerAddr']] -= tx['amount2']  
 
-        return valid
+    return valid
 
 def print_balances(diff, description):
     balances = [v for k, v in sorted(diff.items())]
