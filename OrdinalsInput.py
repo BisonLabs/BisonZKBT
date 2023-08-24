@@ -5,6 +5,9 @@ import os
 import shutil
 from configparser import ConfigParser
 
+config = ConfigParser()
+config.read('config.ini')
+
 def delete_files():
     folders_to_clear = ['./status', './statusProof', './db','./zkProof']
     for folder in folders_to_clear:
@@ -19,7 +22,8 @@ def delete_files():
             print(f"{folder} not found. Skipping...")
 
 def fetch_inscriptions():
-    command = ["ord", "--testnet", "wallet", "inscriptions"]
+    wallet_name = config['contract_info']['wallet_name']
+    command = ["ord", "--testnet", "--wallet", wallet_name, "wallet", "inscriptions"]
     result = subprocess.run(command, stdout=subprocess.PIPE)
     output = result.stdout.decode()
     inscriptions = json.loads(output)
@@ -57,8 +61,6 @@ def save_content(inscriptions, ordinal_url, contract_name):
             json.dump(content, file, indent=4)
 
 def OrdinalInput():
-    config = ConfigParser()
-    config.read('config.ini')
 
     ordinal_url = config['ordinal_explorer']['url']
     contract_name = config['contract_info']['contract_name']
