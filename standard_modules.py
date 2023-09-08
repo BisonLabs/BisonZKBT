@@ -9,11 +9,13 @@ from inside_transfer import transfer_funds
 from proof_manager import record_proof
 import configparser
 from config import get_status
+import requests
 
 
 config = configparser.ConfigParser()
 config.read('config.ini')
 tick_value = config['contract_info']['tick_value']
+bison_sequencer_url = config['Bison_sequencer']['url']
 
 
 def generate_hash(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig):
@@ -204,7 +206,25 @@ class TransferResource(Resource):
         receiptAddress = json_data.get('rAddr')
         amount = json_data.get('amt')
         signature = json_data.get('sig')
+        nonce = json_data.get("nonce")
+        tokenContractAddress = json_data.get("tokenContractAddress")
+        gas_estimated = json_data.get("gas_estimated")
+        gas_estimated_hash = json_data.get("gas_estimated_hash")
 
+
+
+# 使用HTTP请求来获取指定地址的nonce
+        response = requests.get(f"{bison_sequencer_url}/nonce/{senderAddress}")
+        if response.status_code != 200:
+            return {"error": "Failed to fetch nonce from bison sequencer"}, 500
+
+# 获取API返回的nonce
+        api_nonce = response.json().get('nonce')
+
+
+# 比较从API获取的nonce和json中的nonce是否一致
+        if (api_nonce+1) != int(nonce):
+            return {"error": "Mismatched nonce value"}, 400
         # Get Message
         message = json.dumps({
             "method": method,
@@ -212,7 +232,11 @@ class TransferResource(Resource):
             "rAddr": receiptAddress,
             "amt": amount,
             "tick": tick,
-            "sig": ""
+            "nonce": int(nonce),
+            "tokenContractAddress": tokenContractAddress,
+            "sig": "",
+            "gas_estimated": float(gas_estimated),
+            "gas_estimated_hash": gas_estimated_hash
         }, separators=(',', ':'))
 
         if tick != tick_value:
