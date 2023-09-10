@@ -114,6 +114,7 @@ class PrepareSwapResource(Resource):
         makerSig = json_data.get('makerSig')
         takerSig = json_data.get('takerSig')
         
+        
         expiry_time = datetime.fromisoformat(expiry.rstrip("Z"))
 
         # 确认method是swap
@@ -235,7 +236,7 @@ class TransferResource(Resource):
             "nonce": int(nonce),
             "tokenContractAddress": tokenContractAddress,
             "sig": "",
-            "gas_estimated": float(gas_estimated),
+            "gas_estimated": int(gas_estimated),
             "gas_estimated_hash": gas_estimated_hash
         }, separators=(',', ':'))
 
