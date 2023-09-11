@@ -16,7 +16,6 @@ class TempTransaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     hash = db.Column(db.String(256), unique=True, nullable=False)
     method = db.Column(db.String(80), nullable=False)
-    quoteID = db.Column(db.String(80))
     expiry = db.Column(db.String(80))
     tick1 = db.Column(db.String(80))
     contractAddress1 = db.Column(db.String(80))
@@ -28,6 +27,11 @@ class TempTransaction(db.Model):
     takerAddr = db.Column(db.String(80))
     makerSig = db.Column(db.String(80))
     takerSig = db.Column(db.String(80))
+    nonce = db.Column(db.Integer)  # 新增字段
+    slippage = db.Column(db.Float)  # 新增字段
+    gas_estimated = db.Column(db.Integer)  # 新增字段
+    gas_estimated_hash = db.Column(db.String(256))  # 新增字段
+    recal_amount2 = db.Column(db.Float)  # 新增字段
 
 
 class Status(db.Model):

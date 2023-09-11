@@ -168,7 +168,7 @@ class PrepareSwapResource(Resource):
             "amount1": json_data.get('amount1'),
             "tick2": json_data.get('tick2'),
             "contractAddress2": json_data.get('contractAddress2'),
-            "amount2": json_data.get('amount2'),
+            "amount2": float(json_data.get('amount2')),
             "makerAddr": json_data.get('makerAddr'),
             "takerAddr": "", 
             "nonce": int(json_data.get('nonce')),
