@@ -18,16 +18,15 @@ tick_value = config['contract_info']['tick_value']
 bison_sequencer_url = config['Bison_sequencer']['url']
 
 
-def generate_hash(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig):
-    content = f"{method}{quoteID}{expiry}{tick1}{contractAddress1}{amount1}{tick2}{contractAddress2}{amount2}{makerAddr}{takerAddr}{makerSig}{takerSig}".encode('utf-8')
+def generate_hash(method, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig, nonce, slippage, gas_estimated, gas_estimated_hash,recal_amount2):
+    content = f"{method}{expiry}{tick1}{contractAddress1}{amount1}{tick2}{contractAddress2}{amount2}{makerAddr}{takerAddr}{makerSig}{takerSig}{nonce}{slippage}{gas_estimated}{gas_estimated_hash}".encode('utf-8')
     return hashlib.sha256(content).hexdigest()
 
 
-def prepare_swap(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig):
+def prepare_swap(method, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig, nonce, slippage, gas_estimated, gas_estimated_hash,recal_amount2):
     temp_transaction = TempTransaction(
-        hash=generate_hash(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig),
+        hash=generate_hash(method, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig, nonce, slippage, gas_estimated, gas_estimated_hash,recal_amount2),
         method=method,
-        quoteID=quoteID,
         expiry=expiry,
         tick1=tick1,
         contractAddress1=contractAddress1,
@@ -38,7 +37,12 @@ def prepare_swap(method, quoteID, expiry, tick1, contractAddress1, amount1, tick
         makerAddr=makerAddr,
         takerAddr=takerAddr,
         makerSig=makerSig,
-        takerSig=takerSig
+        takerSig=takerSig,
+        nonce=nonce,
+        slippage=slippage,
+        gas_estimated=gas_estimated,
+        gas_estimated_hash=gas_estimated_hash,
+        recal_amount2=recal_amount2
     )
     db.session.add(temp_transaction)
     db.session.commit()
@@ -58,7 +62,7 @@ def commit_swap(hash_value):
     sender_address, receiver_address, amount_to_transfer = (
         (temp_transaction.makerAddr, temp_transaction.takerAddr, temp_transaction.amount1)
         if temp_transaction.tick1 == tick_value
-        else (temp_transaction.takerAddr, temp_transaction.makerAddr, temp_transaction.amount2)
+        else (temp_transaction.takerAddr, temp_transaction.makerAddr, temp_transaction.recal_amount2)
     )
 
     success, message = transfer_funds(sender_address, receiver_address, amount_to_transfer)
@@ -73,12 +77,23 @@ def commit_swap(hash_value):
     current_status_num = get_status()
 
     # 可以在此处调用record_proof来存储证明
-    record_proof(current_status_num,"swap", quoteID=temp_transaction.quoteID, expiry=temp_transaction.expiry,
-                 tick1=temp_transaction.tick1, contractAddress1=temp_transaction.contractAddress1,
-                 amount1=temp_transaction.amount1, tick2=temp_transaction.tick2,
-                 contractAddress2=temp_transaction.contractAddress2, amount2=temp_transaction.amount2,
-                 makerAddr=temp_transaction.makerAddr, takerAddr=temp_transaction.takerAddr,
-                 makerSig=temp_transaction.makerSig, takerSig=temp_transaction.takerSig)
+    record_proof(current_status_num, "swap", 
+                 expiry=temp_transaction.expiry,
+                 tick1=temp_transaction.tick1, 
+                 contractAddress1=temp_transaction.contractAddress1,
+                 amount1=temp_transaction.amount1, 
+                 tick2=temp_transaction.tick2,
+                 contractAddress2=temp_transaction.contractAddress2, 
+                 amount2=temp_transaction.amount2,
+                 makerAddr=temp_transaction.makerAddr, 
+                 takerAddr=temp_transaction.takerAddr,
+                 nonce=temp_transaction.nonce,
+                 slippage=temp_transaction.slippage,
+                 makerSig=temp_transaction.makerSig, 
+                 takerSig=temp_transaction.takerSig,
+                 gas_estimated=temp_transaction.gas_estimated,
+                 gas_estimated_hash=temp_transaction.gas_estimated_hash,
+                 recal_amount2=temp_transaction.recal_amount2)
 
     return True, "Swap committed successfully"
 
@@ -98,28 +113,48 @@ def rollback_swap(hash):
 class PrepareSwapResource(Resource):
     def post(self):
         json_data = request.get_json(force=True)
-        
-        # 提取交换操作所需的所有信息
         method = json_data.get('method')
-        quoteID = json_data.get('quoteID')
+        if method != "swap":
+            return {"error": "Invalid method type"}, 400
+
         expiry = json_data.get('expiry')
         tick1 = json_data.get('tick1')
-        contractAddress1 = json_data.get('contractAddress1')
+        contract_address1 = json_data.get('contractAddress1')
         amount1 = json_data.get('amount1')
         tick2 = json_data.get('tick2')
-        contractAddress2 = json_data.get('contractAddress2')
+        contract_address2 = json_data.get('contractAddress2')
         amount2 = json_data.get('amount2')
-        makerAddr = json_data.get('makerAddr')
-        takerAddr = json_data.get('takerAddr')
-        makerSig = json_data.get('makerSig')
-        takerSig = json_data.get('takerSig')
+        maker_addr = json_data.get('makerAddr')
+        taker_addr = json_data.get('takerAddr')
+        maker_sig = json_data.get('makerSig')
+        slippage = json_data.get('slippage')
+        nonce = json_data.get('nonce')
+        gas_estimated = json_data.get("gas_estimated")
+        gas_estimated_hash = json_data.get("gas_estimated_hash")
+        taker_sig = json_data.get("takerSig")
+        recal_amount2 = json_data.get('recal_amount2')
+
+
+        if slippage is None:
+            return {"error": "Slippage value is required"}, 400
+
+        # 获取nonce并进行检查
+        response = requests.get(f"{bison_sequencer_url}/nonce/{maker_addr}")
+        if response.status_code != 200:
+            return {"error": "Failed to fetch nonce from bison sequencer"}, 500
+        api_nonce = response.json().get('nonce')
+
+        # 比较从API获取的nonce和json中的nonce是否一致
+        if (api_nonce + 1) != int(nonce):
+            return {"error": "Mismatched nonce value"}, 400
+        
+        
+        if abs(float(amount2) - float(recal_amount2)) > float(recal_amount2) * float(slippage):
+            return {"error": f"Slippage exceeded. Expected {recal_amount2}, got {amount2}"}, 400
         
         
         expiry_time = datetime.fromisoformat(expiry.rstrip("Z"))
 
-        # 确认method是swap
-        if method != 'swap':
-            return {"error": "invalid method, expected 'swap'"}, 400
         
         # 检查expiry_time是否在当前时间之后
         if expiry_time < datetime.utcnow():
@@ -127,7 +162,6 @@ class PrepareSwapResource(Resource):
         
         message = json.dumps({
             "method": "swap",
-            "quoteID": json_data.get('quoteID'),
             "expiry": json_data.get('expiry'),
             "tick1": json_data.get('tick1'),
             "contractAddress1": json_data.get('contractAddress1'),
@@ -136,10 +170,16 @@ class PrepareSwapResource(Resource):
             "contractAddress2": json_data.get('contractAddress2'),
             "amount2": json_data.get('amount2'),
             "makerAddr": json_data.get('makerAddr'),
-            "takerAddr": "",  # taker地址为空
-            # makerSig  和 takerSig 将稍后添加
+            "takerAddr": "", 
+            "nonce": int(json_data.get('nonce')),
+            "slippage": float(json_data.get('slippage')),
+            "makerSig": "",
+            "takerSig": "",
+            "gas_estimated": int(gas_estimated),
+            "gas_estimated_hash":gas_estimated_hash
         }, separators=(',', ':'))
-        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', makerAddr, message, makerSig], text=True, capture_output=True)
+
+        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', maker_addr, message, maker_sig], text=True, capture_output=True)
         result1 = process.stdout.strip()  # 返回结果
 
         print(result1)
@@ -148,7 +188,6 @@ class PrepareSwapResource(Resource):
     
         message = json.dumps({
             "method": "swap",
-            "quoteID": json_data.get('quoteID'),
             "expiry": json_data.get('expiry'),
             "tick1": json_data.get('tick1'),
             "contractAddress1": json_data.get('contractAddress1'),
@@ -157,9 +196,17 @@ class PrepareSwapResource(Resource):
             "contractAddress2": json_data.get('contractAddress2'),
             "amount2": json_data.get('amount2'),
             "makerAddr": json_data.get('makerAddr'),
-            "takerAddr": json_data.get('takerAddr'),  
+            "takerAddr": taker_addr, 
+            "nonce": int(json_data.get('nonce')),
+            "slippage": float(json_data.get('slippage')),
+            "makerSig": maker_sig,
+            "takerSig": "",
+            "gas_estimated": int(gas_estimated),
+            "gas_estimated_hash":gas_estimated_hash,
+            "recal_amount2": float(recal_amount2)
         }, separators=(',', ':'))
-        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', takerAddr, message, takerSig], text=True, capture_output=True)
+
+        process = subprocess.run(['node', './bisonappbackend_nodejs/bip322Verify.js', taker_addr, message, taker_sig], text=True, capture_output=True)
         result2 = process.stdout.strip()  # 返回结果
 
         print(result2)
@@ -174,7 +221,7 @@ class PrepareSwapResource(Resource):
             return {"error": "invalid tick value"}, 400
         
         # 使用prepare_swap替代直接转账
-        success, transaction_hash = prepare_swap(method, quoteID, expiry, tick1, contractAddress1, amount1, tick2, contractAddress2, amount2, makerAddr, takerAddr, makerSig, takerSig)
+        success, transaction_hash = prepare_swap(method, expiry, tick1, contract_address1, amount1, tick2, contract_address2, amount2, maker_addr, taker_addr, maker_sig, taker_sig, nonce, slippage, gas_estimated, gas_estimated_hash, recal_amount2)
         if not success:
             return {"error": "Failed to prepare the swap"}, 400
 
